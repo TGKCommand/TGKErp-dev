@@ -27,9 +27,7 @@ function modal(content) {
   return ov
 }
 
-function closeModal() {
-  document.getElementById('tgk-modal')?.remove()
-}
+function closeModal() { document.getElementById('tgk-modal')?.remove() }
 window.closeModal = closeModal
 
 function mHeader(title) {
@@ -50,14 +48,27 @@ function mField(id, label, type, value, placeholder) {
     ) + '</div>'
 }
 
-function mFooter() {
+function mSelect(id, label, options, selectedVal) {
+  return '<div style="margin-bottom:12px">'
+    + '<div style="font-size:10px;color:#8a9ba8;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">' + label + '</div>'
+    + '<select id="' + id + '" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px">'
+    + options.map(o => '<option value="' + o + '"' + (o===selectedVal?' selected':'') + '>' + o + '</option>').join('')
+    + '</select></div>'
+}
+
+function mFooter(extraBtns) {
   return '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;padding-top:16px;border-top:1px solid #e2e8f0">'
+    + (extraBtns || '')
     + '<button onclick="closeModal()" style="padding:8px 16px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;cursor:pointer;background:#fff">Cancel</button>'
     + '<button onclick="window._pendingSave()" style="padding:8px 16px;background:#2ABFAA;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">Save</button>'
     + '</div>'
 }
 
 function g(id) { return (document.getElementById(id)?.value || '').trim() }
+function setSyncStatus(msg, color) {
+  const el = document.getElementById('sync-status')
+  if (el) { el.textContent = msg; el.style.color = color || '#8a9ba8' }
+}
 
 // ── BOM ────────────────────────────────────────────────────────────────────
 
@@ -68,6 +79,38 @@ window.selectBOM = async (pn) => {
     const { data } = await window.db.from('bom_items').select('*').eq('parent_pn', pn).order('sort_order')
     S.boms[pn] = data || []
   }
+  render()
+}
+
+window.openAddBOMComponent = (parentPn) => {
+  modal(mHeader('Add Component to ' + parentPn)
+    + mField('bom-pn','Part # or Assembly','text','','e.g. TGK-BOLT-M8')
+    + mField('bom-qty','Qty per Unit','number','1','')
+    + mSelect('bom-type','Type',['part','assembly','subassembly'],'part')
+    + mFooter()
+  )
+  window._pendingSave = async () => {
+    const childPn = g('bom-pn').toUpperCase()
+    const qty = parseFloat(g('bom-qty')) || 1
+    const type = document.getElementById('bom-type')?.value || 'part'
+    if (!childPn) { alert('Part # is required'); return }
+    const sortOrder = (S.boms[parentPn]||[]).length + 1
+    const { data, error } = await window.db.from('bom_items').insert({
+      parent_pn: parentPn, child_pn: childPn, qty, item_type: type, sort_order: sortOrder
+    }).select().single()
+    if (error) { alert('Error: ' + error.message); return }
+    if (!S.boms[parentPn]) S.boms[parentPn] = []
+    S.boms[parentPn] = [...S.boms[parentPn], data]
+    closeModal()
+    render()
+  }
+}
+
+window.removeBOMComponent = async (itemId, parentPn) => {
+  if (!confirm('Remove this component from the BOM?')) return
+  const { error } = await window.db.from('bom_items').delete().eq('id', itemId)
+  if (error) { alert('Error: ' + error.message); return }
+  if (S.boms[parentPn]) S.boms[parentPn] = S.boms[parentPn].filter(b => b.id !== itemId)
   render()
 }
 
@@ -103,6 +146,39 @@ window.sendAIMessage = async () => {
   messages.scrollTop = messages.scrollHeight
 }
 
+// ── SHOPIFY SYNC ───────────────────────────────────────────────────────────
+
+window.syncOrders = async () => {
+  const store = S.shopify?.store
+  const key = S.shopify?.key
+  if (!store || !key) {
+    alert('Shopify credentials not configured. Go to Settings in the HTML ERP to set up credentials.')
+    return
+  }
+  setSyncStatus('Syncing...', '#E07B28')
+  try {
+    const since = new Date(Date.now() - 90*24*60*60*1000).toISOString()
+    const res = await fetch('https://piamamighqiielfztgic.supabase.co/functions/v1/shopify-orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBpYW1hbWlnaHFpaWVsZnp0Z2ljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc4NjkxMzUsImV4cCI6MjA5MzQ0NTEzNX0.YwLflTw6F4cRzmY78QoAY6Zud2IHGVP5xL_yvMFxheA' },
+      body: JSON.stringify({ action: 'sync', store, key, since, page_info: '' })
+    })
+    const json = await res.json()
+    if (json.error) { setSyncStatus('Error: ' + json.error, '#ef4444'); return }
+    const orders = json.orders || []
+    setSyncStatus('Fetched ' + orders.length + ' orders from Shopify', '#22c55e')
+    // Reload sales from DB after sync
+    setTimeout(async () => {
+      const { data } = await window.db.from('sales').select('*').order('sale_date', { ascending: false }).limit(5000)
+      if (data) { S.sales = data; render() }
+      setSyncStatus('Sync complete', '#22c55e')
+      setTimeout(() => setSyncStatus('', ''), 3000)
+    }, 2000)
+  } catch (e) {
+    setSyncStatus('Sync failed: ' + e.message, '#ef4444')
+  }
+}
+
 // ── SALES ──────────────────────────────────────────────────────────────────
 
 window.markShipped = async (id) => {
@@ -124,6 +200,15 @@ window.markDelivered = async (id) => {
   render()
 }
 
+window.cancelOrder = async (id) => {
+  if (!confirm('Cancel this order?')) return
+  const updates = { fulfillment_status: 'Cancelled', cancelled_at: new Date().toISOString() }
+  const { error } = await window.db.from('sales').update(updates).eq('id', id)
+  if (error) { alert('Error: ' + error.message); return }
+  S.sales = S.sales.map(s => s.id === id ? {...s, ...updates} : s)
+  render()
+}
+
 window.openOrderDetail = (id) => {
   const sale = S.sales.find(s => s.id === id)
   if (!sale) return
@@ -137,10 +222,10 @@ window.openOrderDetail = (id) => {
     + f('Tracking', sale.tracking_number) + f('Carrier', sale.carrier)
     + '</div>'
     + '<div style="font-size:12px;font-weight:700;color:#8a9ba8;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Shipping Address</div>'
-    + '<div style="font-size:12px;color:#4a5568;line-height:1.8">'
+    + '<div style="font-size:12px;color:#4a5568;line-height:1.8;margin-bottom:16px">'
     + [sale.shipping_address1, sale.shipping_address2, sale.shipping_city, sale.shipping_province, sale.shipping_zip, sale.shipping_country].filter(Boolean).join('<br>')
     + '</div>'
-    + '<div style="display:flex;gap:8px;margin-top:16px;padding-top:16px;border-top:1px solid #e2e8f0">'
+    + '<div style="display:flex;gap:8px;padding-top:16px;border-top:1px solid #e2e8f0">'
     + (sale.fulfillment_status === 'Open' || sale.fulfillment_status === 'Packed'
         ? '<button onclick="closeModal();window.markShipped(\'' + id + '\')" style="padding:8px 16px;background:#2ABFAA;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">Mark Shipped</button>'
         : '')
@@ -180,6 +265,36 @@ window.openAddOrder = () => {
     closeModal()
     render()
   }
+}
+
+// ── PACK QUEUE ─────────────────────────────────────────────────────────────
+
+window.packLine = async (id) => {
+  const { error } = await window.db.from('sales').update({ fulfillment_status: 'Packed' }).eq('id', id)
+  if (error) { alert('Error: ' + error.message); return }
+  S.sales = S.sales.map(s => s.id === id ? {...s, fulfillment_status: 'Packed'} : s)
+  render()
+}
+
+window.packOrder = async (orderNumber) => {
+  const lines = S.sales.filter(s => s.order_number === orderNumber && s.fulfillment_status === 'Open')
+  for (const line of lines) {
+    await window.db.from('sales').update({ fulfillment_status: 'Packed' }).eq('id', line.id)
+    S.sales = S.sales.map(s => s.id === line.id ? {...s, fulfillment_status: 'Packed'} : s)
+  }
+  render()
+}
+
+window.shipOrder = async (orderNumber) => {
+  const tracking = prompt('Enter tracking number for ' + orderNumber + ':')
+  const lines = S.sales.filter(s => s.order_number === orderNumber && (s.fulfillment_status === 'Open' || s.fulfillment_status === 'Packed'))
+  const updates = { fulfillment_status: 'Shipped', shipped_at: new Date().toISOString() }
+  if (tracking) updates.tracking_number = tracking
+  for (const line of lines) {
+    await window.db.from('sales').update(updates).eq('id', line.id)
+    S.sales = S.sales.map(s => s.id === line.id ? {...s, ...updates} : s)
+  }
+  render()
 }
 
 // ── PARTS ──────────────────────────────────────────────────────────────────
@@ -252,7 +367,7 @@ window.adjustStock = (id, pn, current) => {
   modal(mHeader('Adjust Stock — ' + pn)
     + '<div style="font-size:12px;color:#8a9ba8;margin-bottom:16px">Current stock: <strong style="color:#1a1c1e">' + current + '</strong></div>'
     + mField('s-qty','New Stock Count','number', current,'')
-    + mField('s-note','Note','text','','Reason for adjustment')
+    + mField('s-note','Note (optional)','text','','Reason for adjustment')
     + mFooter()
   )
   window._pendingSave = async () => {
@@ -283,9 +398,7 @@ window.openAddAssembly = () => {
       pn, description: g('a-desc'),
       category: g('a-cat') || null,
       msrp: parseFloat(g('a-msrp')) || 0,
-      is_subassembly: false,
-      discontinued: false,
-      total_on_hand: 0
+      is_subassembly: false, discontinued: false, total_on_hand: 0
     }).select().single()
     if (error) { alert('Error: ' + error.message); return }
     S.assemblies = [...S.assemblies, data].sort((a,b) => a.pn.localeCompare(b.pn))
@@ -303,6 +416,7 @@ window.openEditAssembly = (id) => {
     + mField('a-msrp','MSRP','number', a.msrp||0,'')
     + mField('a-ship-us','Shipping US','text', a.ship_us||'','FREE')
     + mField('a-ship-ca','Shipping CA','text', a.ship_ca||'','$25.00')
+    + mField('a-pl-notes','Price List Notes','text', a.pl_notes||'','')
     + mFooter()
   )
   window._pendingSave = async () => {
@@ -312,6 +426,7 @@ window.openEditAssembly = (id) => {
       msrp: parseFloat(g('a-msrp')) || 0,
       ship_us: g('a-ship-us') || null,
       ship_ca: g('a-ship-ca') || null,
+      pl_notes: g('a-pl-notes') || null,
       updated_at: new Date().toISOString()
     }
     const { error } = await window.db.from('assemblies').update(updates).eq('id', id)
@@ -329,14 +444,13 @@ window.openAddPO = () => {
   const vendorOpts = vendors.map(v => '<option value="' + v + '">' + v + '</option>').join('')
   modal(mHeader('Add Purchase Order')
     + '<div style="margin-bottom:12px"><div style="font-size:10px;color:#8a9ba8;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Vendor</div>'
-    + '<select id="po-vendor" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px">'
-    + '<option value="">Select vendor...</option>' + vendorOpts + '</select></div>'
+    + '<select id="po-vendor" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px"><option value="">Select vendor...</option>' + vendorOpts + '</select></div>'
     + mField('po-pn','Part #','text','','')
     + mField('po-qty','Quantity','number','1','')
     + mField('po-cost','Unit Cost','number','0','')
     + mField('po-date','Order Date','date',new Date().toISOString().slice(0,10),'')
     + mField('po-eta','Expected Delivery','date','','')
-    + mField('po-num','Order # (optional)','text','','PO-001')
+    + mField('po-num','PO Number (optional)','text','','PO-001')
     + mFooter()
   )
   window._pendingSave = async () => {
@@ -346,13 +460,9 @@ window.openAddPO = () => {
     const cost = parseFloat(g('po-cost')) || 0
     if (!vendor || !pn) { alert('Vendor and Part # are required'); return }
     const { data, error } = await window.db.from('purchases').insert({
-      vendor, pn, qty,
-      unit_cost: cost,
-      total_cost: cost * qty,
-      order_date: g('po-date'),
-      expected_date: g('po-eta') || null,
-      order_number: g('po-num') || null,
-      status: 'Ordered'
+      vendor, pn, qty, unit_cost: cost, total_cost: cost * qty,
+      order_date: g('po-date'), expected_date: g('po-eta') || null,
+      order_number: g('po-num') || null, status: 'Ordered'
     }).select().single()
     if (error) { alert('Error: ' + error.message); return }
     S.purchases = [data, ...S.purchases]
@@ -373,12 +483,8 @@ window.markPOReceived = async (id) => {
 window.openEditPO = (id) => {
   const p = S.purchases.find(x => x.id === id)
   if (!p) return
-  const statusOpts = ['Ordered','Partial','Received','Cancelled'].map(s =>
-    '<option value="' + s + '"' + (p.status===s?' selected':'') + '>' + s + '</option>'
-  ).join('')
   modal(mHeader('Edit PO — ' + (p.order_number||p.pn))
-    + '<div style="margin-bottom:12px"><div style="font-size:10px;color:#8a9ba8;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Status</div>'
-    + '<select id="po-status" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px">' + statusOpts + '</select></div>'
+    + mSelect('po-status','Status',['Ordered','Partial','Received','Cancelled'], p.status||'Ordered')
     + mField('po-qty','Quantity','number', p.qty||1,'')
     + mField('po-cost','Unit Cost','number', p.unit_cost||0,'')
     + mField('po-eta','Expected Delivery','date', p.expected_date||'','')
@@ -395,6 +501,62 @@ window.openEditPO = (id) => {
     const { error } = await window.db.from('purchases').update(updates).eq('id', id)
     if (error) { alert('Error: ' + error.message); return }
     S.purchases = S.purchases.map(x => x.id === id ? {...x, ...updates} : x)
+    closeModal()
+    render()
+  }
+}
+
+// ── WARRANTY CLAIMS ────────────────────────────────────────────────────────
+
+window.openAddClaim = () => {
+  modal(mHeader('Add Warranty Claim')
+    + mField('w-order','Order #','text','','')
+    + mField('w-pn','Part #','text','','')
+    + mField('w-customer','Customer Name','text','','')
+    + mField('w-issue','Issue Description','textarea','','Describe the problem...')
+    + mSelect('w-status','Status',['Open','Resolved','Closed'],'Open')
+    + mFooter()
+  )
+  window._pendingSave = async () => {
+    const orderNum = g('w-order')
+    const pn = g('w-pn').toUpperCase()
+    if (!orderNum) { alert('Order # is required'); return }
+    const { data, error } = await window.db.from('warranty_claims').insert({
+      order_number: orderNum,
+      pn: pn || null,
+      customer_name: g('w-customer') || null,
+      issue: g('w-issue') || null,
+      status: document.getElementById('w-status')?.value || 'Open'
+    }).select().single()
+    if (error) { alert('Error: ' + error.message); return }
+    S.warrantyClaims = [data, ...S.warrantyClaims]
+    closeModal()
+    render()
+  }
+}
+
+window.openEditClaim = (id) => {
+  const c = S.warrantyClaims.find(x => x.id === id)
+  if (!c) return
+  modal(mHeader('Edit Claim — ' + (c.order_number||''))
+    + mField('w-pn','Part #','text', c.pn||'','')
+    + mField('w-customer','Customer','text', c.customer_name||'','')
+    + mField('w-issue','Issue','textarea', c.issue||'','')
+    + mField('w-resolution','Resolution','textarea', c.resolution||'','What was done to resolve...')
+    + mSelect('w-status','Status',['Open','Resolved','Closed'], c.status||'Open')
+    + mFooter()
+  )
+  window._pendingSave = async () => {
+    const updates = {
+      pn: g('w-pn').toUpperCase() || null,
+      customer_name: g('w-customer') || null,
+      issue: g('w-issue') || null,
+      resolution: g('w-resolution') || null,
+      status: document.getElementById('w-status')?.value || c.status
+    }
+    const { error } = await window.db.from('warranty_claims').update(updates).eq('id', id)
+    if (error) { alert('Error: ' + error.message); return }
+    S.warrantyClaims = S.warrantyClaims.map(x => x.id === id ? {...x, ...updates} : x)
     closeModal()
     render()
   }
@@ -432,16 +594,12 @@ window.openAddDealer = () => {
 window.openEditDealer = (id) => {
   const d = S.dealers.find(x => x.id === id)
   if (!d) return
-  const statusOpts = ['Active','Inactive'].map(s =>
-    '<option value="' + s + '"' + (d.status===s?' selected':'') + '>' + s + '</option>'
-  ).join('')
   modal(mHeader('Edit Dealer — ' + d.name)
     + mField('d-contact','Contact Name','text', d.contact_name||'','')
     + mField('d-email','Email','email', d.contact_email||'','')
     + mField('d-phone','Phone','text', d.contact_phone||'','')
     + mField('d-disc','Discount %','number', d.discount_pct||20,'')
-    + '<div style="margin-bottom:12px"><div style="font-size:10px;color:#8a9ba8;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Status</div>'
-    + '<select id="d-status" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px">' + statusOpts + '</select></div>'
+    + mSelect('d-status','Status',['Active','Inactive'], d.status||'Active')
     + mFooter()
   )
   window._pendingSave = async () => {

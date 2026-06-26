@@ -16,11 +16,17 @@ export function renderSales() {
 
   const statuses = ['Open','Packed','Partial','Shipped','Delivered','On Hold','Cancelled','Refunded']
   const statusCounts = {}
-  statuses.forEach(st => {
-    statusCounts[st] = S.sales.filter(s => (s.fulfillment_status||'Open') === st).length
-  })
+  statuses.forEach(st => { statusCounts[st] = S.sales.filter(s => (s.fulfillment_status||'Open') === st).length })
 
-  return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap">'
+  const shopifyConnected = !!(S.shopify?.store && S.shopify?.key)
+
+  return '<div style="background:#fff;border-radius:8px;border:1px solid #e2e8f0;padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+    + '<span style="font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8a9ba8">Sync</span>'
+    + '<button onclick="window.syncOrders()" style="padding:5px 12px;border:1px solid #2ABFAA44;color:#2ABFAA;border-radius:5px;font-size:11px;cursor:pointer;background:#fff">🔄 Orders</button>'
+    + '<span style="font-size:10px;color:' + (shopifyConnected?'#22c55e':'#ef4444') + '">' + (shopifyConnected?'● Shopify connected':'● No Shopify credentials') + '</span>'
+    + '<span style="margin-left:auto;font-size:10px;color:#8a9ba8" id="sync-status"></span>'
+    + '</div>'
+    + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap">'
     + '<input placeholder="Order #, SKU or customer..." value="' + (sf.search||'') + '"'
     + ' oninput="window.setFilter(\'sales\',\'search\',this.value)"'
     + ' style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;width:240px">'
@@ -55,13 +61,16 @@ export function renderSales() {
           + '<td style="padding:9px 12px;font-family:monospace;color:#1a1c1e">' + (s.pn||'—') + '</td>'
           + '<td style="padding:9px 12px;text-align:center">' + (s.qty||1) + '</td>'
           + '<td style="padding:9px 12px"><span style="padding:2px 8px;border-radius:10px;background:' + c + '22;color:' + c + ';font-size:10px;font-weight:700">' + status + '</span></td>'
-          + '<td style="padding:9px 12px;color:#8a9ba8;font-size:11px">' + (s.tracking_number||'—') + '</td>'
-          + '<td style="padding:9px 12px">'
+          + '<td style="padding:9px 12px;color:#8a9ba8;font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (s.tracking_number||'—') + '</td>'
+          + '<td style="padding:9px 12px;white-space:nowrap">'
           + (status === 'Open' || status === 'Packed'
               ? '<button onclick="window.markShipped(\'' + s.id + '\')" style="padding:3px 8px;background:#2ABFAA;color:#fff;border:none;border-radius:4px;font-size:10px;cursor:pointer;margin-right:4px">Ship</button>'
               : '')
           + (status === 'Shipped'
-              ? '<button onclick="window.markDelivered(\'' + s.id + '\')" style="padding:3px 8px;background:#22c55e;color:#fff;border:none;border-radius:4px;font-size:10px;cursor:pointer">Deliver</button>'
+              ? '<button onclick="window.markDelivered(\'' + s.id + '\')" style="padding:3px 8px;background:#22c55e;color:#fff;border:none;border-radius:4px;font-size:10px;cursor:pointer;margin-right:4px">Deliver</button>'
+              : '')
+          + (status === 'Open'
+              ? '<button onclick="window.cancelOrder(\'' + s.id + '\')" style="padding:3px 8px;border:1px solid #ef444433;color:#ef4444;border-radius:4px;font-size:10px;cursor:pointer;background:#fff">Cancel</button>'
               : '')
           + '</td>'
           + '</tr>'

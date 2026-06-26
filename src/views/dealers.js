@@ -11,6 +11,8 @@ export function renderDealers() {
     )
   }
 
+  const baseUrl = 'https://tgkcommand.github.io/TGKErp/tgk_erp.html'
+
   return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">'
     + '<input placeholder="Dealer name or email" value="' + (sf.search||'') + '"'
     + ' oninput="window.setFilter(\'dealers\',\'search\',this.value)"'
@@ -30,14 +32,17 @@ export function renderDealers() {
     + '</tr></thead><tbody>'
     + dealers.map(d => {
         const col = d.status === 'Active' ? '#22c55e' : '#ef4444'
+        const portalUrl = baseUrl + '?dealer=' + d.id
         return '<tr style="border-bottom:1px solid #f1f5f9" onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'\'">'
           + '<td style="padding:9px 12px;font-weight:700;color:#1a1c1e">' + (d.name||'—') + '</td>'
           + '<td style="padding:9px 12px;color:#4a5568">' + (d.contact_name||'—') + '</td>'
           + '<td style="padding:9px 12px;color:#2ABFAA">' + (d.contact_email||'—') + '</td>'
           + '<td style="padding:9px 12px;color:#E07B28;font-weight:700">' + (d.discount_pct ? d.discount_pct+'% off' : '—') + '</td>'
           + '<td style="padding:9px 12px"><span style="padding:2px 8px;border-radius:10px;background:' + col + '22;color:' + col + ';font-size:10px;font-weight:700">' + (d.status||'Active') + '</span></td>'
-          + '<td style="padding:9px 12px">'
+          + '<td style="padding:9px 12px;display:flex;gap:4px">'
           + '<button onclick="window.openEditDealer(\'' + d.id + '\')" style="padding:3px 8px;border:1px solid #e2e8f0;border-radius:4px;font-size:10px;cursor:pointer;background:#fff">Edit</button>'
+          + '<button onclick="navigator.clipboard.writeText(\'' + portalUrl + '\').then(()=>alert(\'Portal URL copied!\'))" style="padding:3px 8px;border:1px solid #2ABFAA33;color:#2ABFAA;border-radius:4px;font-size:10px;cursor:pointer;background:#fff">Copy Portal</button>'
+          + '<a href="' + portalUrl + '" target="_blank" style="padding:3px 8px;border:1px solid #E07B2833;color:#E07B28;border-radius:4px;font-size:10px;cursor:pointer;background:#fff;text-decoration:none">View</a>'
           + '</td>'
           + '</tr>'
       }).join('')
