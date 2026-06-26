@@ -8,6 +8,8 @@ import { renderInventory } from './inventory.js'
 import { renderVendors } from './vendors.js'
 import { renderDealers } from './dealers.js'
 import { renderPurchases } from './purchases.js'
+import { renderPlanning } from './planning.js'
+import { renderWarranty } from './warranty.js'
 
 const views = {
   dashboard: renderDashboard,
@@ -17,7 +19,9 @@ const views = {
   inventory: renderInventory,
   vendors: renderVendors,
   dealers: renderDealers,
-  purchases: renderPurchases
+  purchases: renderPurchases,
+  planning: renderPlanning,
+  warranty: renderWarranty
 }
 
 export function render() {
