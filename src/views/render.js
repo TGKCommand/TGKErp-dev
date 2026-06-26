@@ -3,11 +3,13 @@ import { renderLayout } from './layout.js'
 import { renderDashboard } from './dashboard.js'
 import { renderSales } from './sales.js'
 import { renderParts } from './parts.js'
+import { renderAssemblies } from './assemblies.js'
 
 const views = {
   dashboard: renderDashboard,
   sales: renderSales,
   parts: renderParts,
+  assemblies: renderAssemblies,
 }
 
 export function render() {
