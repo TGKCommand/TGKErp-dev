@@ -2,10 +2,12 @@ import { S } from '../utils/state.js'
 import { renderLayout } from './layout.js'
 import { renderDashboard } from './dashboard.js'
 import { renderSales } from './sales.js'
+import { renderParts } from './parts.js'
 
 const views = {
   dashboard: renderDashboard,
   sales: renderSales,
+  parts: renderParts,
 }
 
 export function render() {
