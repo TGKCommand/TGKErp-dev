@@ -14,6 +14,9 @@ import { renderCorrections } from './corrections.js'
 import { renderCycleCounts } from './cyclecounts.js'
 import { renderLookup } from './lookup.js'
 import { renderBOMs } from './boms.js'
+import { renderPackQueue } from './packqueue.js'
+import { renderAI } from './ai.js'
+import { renderReports } from './reports.js'
 
 const views = {
   dashboard: renderDashboard,
@@ -30,6 +33,9 @@ const views = {
   cyclecounts: renderCycleCounts,
   lookup: renderLookup,
   boms: renderBOMs,
+  packqueue: renderPackQueue,
+  ai: renderAI,
+  reports: renderReports,
 }
 
 export function render() {
