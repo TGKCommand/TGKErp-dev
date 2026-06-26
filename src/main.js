@@ -13,6 +13,15 @@ window.setFilter = (section, key, val) => {
   S.filters[section][key] = val
   render()
 }
+window.selectBOM = async (pn) => {
+  if (!S.filters.boms) S.filters.boms = {}
+  S.filters.boms.selected = pn
+  if (!S.boms[pn]) {
+    const { data } = await window.db.from('bom_items').select('*').eq('parent_pn', pn).order('sort_order')
+    S.boms[pn] = data || []
+  }
+  render()
+}
 
 async function start() {
   const db = await initSupabase()

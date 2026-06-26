@@ -10,6 +10,10 @@ import { renderDealers } from './dealers.js'
 import { renderPurchases } from './purchases.js'
 import { renderPlanning } from './planning.js'
 import { renderWarranty } from './warranty.js'
+import { renderCorrections } from './corrections.js'
+import { renderCycleCounts } from './cyclecounts.js'
+import { renderLookup } from './lookup.js'
+import { renderBOMs } from './boms.js'
 
 const views = {
   dashboard: renderDashboard,
@@ -21,10 +25,14 @@ const views = {
   dealers: renderDealers,
   purchases: renderPurchases,
   planning: renderPlanning,
-  warranty: renderWarranty
+  warranty: renderWarranty,
+  corrections: renderCorrections,
+  cyclecounts: renderCycleCounts,
+  lookup: renderLookup,
+  boms: renderBOMs,
 }
 
 export function render() {
-  const viewFn = views[S.view] || (() => `<div style="padding:40px;color:#8a9ba8">View "${S.view}" not yet migrated</div>`)
+  const viewFn = views[S.view] || (() => '<div style="padding:40px;color:#8a9ba8">View "' + S.view + '" not yet migrated</div>')
   document.getElementById('app').innerHTML = renderLayout(viewFn())
 }
