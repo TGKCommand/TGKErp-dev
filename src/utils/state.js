@@ -1,0 +1,16 @@
+export const S = {
+  view: 'dashboard',
+  parts: [],
+  assemblies: [],
+  boms: {},
+  sales: [],
+  purchases: [],
+  dealers: [],
+  vendors: [],
+  settings: {},
+  shopify: { connected: false, store: '', key: '' },
+  filters: {},
+  searchQ: '',
+  currentUser: null,
+  currentRole: null,
+}
